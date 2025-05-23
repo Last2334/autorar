@@ -161,3 +161,47 @@ if __name__ == '__main__':
     
     print("\n注意: 对于 'password_needed' 和 'wrong_password' 状态，信息字段包含来自WinRAR的详细错误输出。")
     print("测试后可能需要手动清理 'test_files' 目录。")
+
+
+def is_archive_winrar(filepath, winrar_path):
+    """
+    Checks if a file is a valid archive using WinRAR's test command.
+
+    Args:
+        filepath (str): Path to the file to check.
+        winrar_path (str): Path to WinRAR.exe.
+
+    Returns:
+        bool: True if WinRAR recognizes it as an archive (even if passworded or corrupted), False otherwise.
+    """
+    if not os.path.exists(filepath):
+        print(f"is_archive_winrar: File not found at {filepath}")
+        return False # File itself doesn't exist
+
+    command = [winrar_path, "t", "-y", "-p-", filepath]
+    # Exit codes indicating WinRAR recognized it as some form of archive:
+    # 0: Success (valid, non-passworded or empty password)
+    # 1: Warning (non-fatal error, e.g., file locked, but still an archive)
+    # 3: CRC error (corrupted data, but it's an archive)
+    # 10: Incorrect password / No files found (implies it's an archive that's likely password-protected)
+    # 11: Wrong password (explicitly a password-protected archive)
+    recognized_archive_exit_codes = {0, 1, 3, 10, 11}
+
+    try:
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+        
+        if result.returncode in recognized_archive_exit_codes:
+            # print(f"is_archive_winrar: '{filepath}' IS an archive. WinRAR exit code: {result.returncode}")
+            return True
+        else:
+            # print(f"is_archive_winrar: '{filepath}' is NOT an archive or error. WinRAR exit code: {result.returncode}")
+            # print(f"is_archive_winrar: Stderr: {result.stderr.decode(errors='replace').strip()}")
+            return False
+    except FileNotFoundError:
+        # This would typically mean winrar_path is incorrect, but main.py should check winrar_path availability.
+        # Or, less likely, filepath moved/deleted between os.path.exists and here.
+        print(f"is_archive_winrar: Error - WinRAR executable not found at {winrar_path} or file '{filepath}' vanished.")
+        return False
+    except Exception as e:
+        print(f"is_archive_winrar: An unexpected error occurred while testing archive '{filepath}': {e}")
+        return False

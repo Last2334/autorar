@@ -3,7 +3,7 @@ from tkinter import ttk, simpledialog, filedialog, Menu
 import os
 import json # For config file
 import collections
-from decompressor import extract_archive
+from decompressor import extract_archive, is_archive_winrar # Import new function
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -11,7 +11,8 @@ except ImportError:
     print("tkinterdnd2 library not found. Please install it using: pip install tkinterdnd2")
     TkinterDnD = None
 
-ARCHIVE_EXTENSIONS = {".rar", ".zip", ".7z", ".tar", ".gz", ".tgz"}
+# ARCHIVE_EXTENSIONS is no longer used. Validation is done by is_archive_winrar.
+# ARCHIVE_EXTENSIONS = {".rar", ".zip", ".7z", ".tar", ".gz", ".tgz"} 
 CONFIG_FILE = "config.json"
 DEFAULT_WINRAR_PATH = "C:/Program Files/WinRAR/WinRAR.exe"
 
@@ -38,6 +39,17 @@ class App(TkinterDnD.Tk if TkinterDnD else tk.Tk):
         if TkinterDnD:
             self.file_listbox.drop_target_register(DND_FILES)
             self.original_dnd_bind_id = self.file_listbox.dnd_bind('<<Drop>>', self.on_drop)
+
+        # Frame for password input
+        self.password_frame = ttk.Frame(self)
+        self.password_frame.pack(fill=tk.X, padx=10, pady=(0,5)) # pady top 0, bottom 5
+
+        self.password_label = ttk.Label(self.password_frame, text="默认密码 (可选):")
+        self.password_label.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.default_password_var = tk.StringVar()
+        self.default_password_entry = ttk.Entry(self.password_frame, textvariable=self.default_password_var, show='*')
+        self.default_password_entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
         self.start_button = ttk.Button(self, text="开始解压", command=self.start_decompression)
         self.start_button.pack(pady=5)
@@ -147,25 +159,21 @@ class App(TkinterDnD.Tk if TkinterDnD else tk.Tk):
         """Helper function to enable/disable controls."""
         if state == tk.DISABLED:
             self.start_button.config(state=tk.DISABLED)
-            self.file_listbox.config(state=tk.DISABLED) # Standard Tkinter disable
+            self.file_listbox.config(state=tk.DISABLED) 
+            self.default_password_entry.config(state=tk.DISABLED)
             if TkinterDnD:
                 try:
-                    # Attempt to unregister the listbox as a drop target
                     self.file_listbox.drop_target_unregister()
                     print("Listbox unregistered as drop target.")
                 except Exception as e:
-                    # This might happen if tkinterdnd2 is not fully initialized
-                    # or if the widget wasn't registered, or if the method name is different.
                     print(f"Error unregistering drop target: {e}")
         else: # tk.NORMAL
             self.start_button.config(state=tk.NORMAL)
-            self.file_listbox.config(state=tk.NORMAL) # Standard Tkinter enable
+            self.file_listbox.config(state=tk.NORMAL) 
+            self.default_password_entry.config(state=tk.NORMAL)
             if TkinterDnD:
                 try:
-                    # Re-register and re-bind
                     self.file_listbox.drop_target_register(DND_FILES)
-                    # Re-binding is important if unregister clears bindings, or if we want to ensure it's fresh.
-                    # Storing the ID is still fine, though not used for unbinding in this revised approach.
                     self.original_dnd_bind_id = self.file_listbox.dnd_bind('<<Drop>>', self.on_drop)
                     print("Listbox re-registered as drop target and rebound.")
                 except Exception as e:
@@ -207,24 +215,33 @@ class App(TkinterDnD.Tk if TkinterDnD else tk.Tk):
         self.status_label.config(text=f"扫描解压目录 '{parent_archive_name}' 查找嵌套压缩包...")
         self.update_idletasks()
         found_nested_count = 0
+        # Import the validation function at the beginning of the App class or globally in main.py
+        # For now, assuming it's available via self.decompressor or direct import if main.py handles it.
+        # Let's assume it's imported as `is_archive_winrar` from `decompressor` module.
+        # from decompressor import is_archive_winrar # This should be at the top of the file
+
         try:
             for root, _, files in os.walk(parent_output_directory, onerror=lambda e: print(f"警告: 扫描目录时发生错误: {e} (路径: {e.filename}) - 跳过此目录分支。")):
                 for file in files:
                     file_path = os.path.join(root, file)
                     try:
-                        _, ext = os.path.splitext(file_path)
-                        abs_path = os.path.abspath(file_path) # Get absolute path early for consistent checks
+                        # No need for ext check anymore, directly use abs_path for is_archive_winrar
+                        abs_path = os.path.abspath(file_path) 
                     except Exception as e_path:
                         print(f"警告: 处理路径 '{file_path}' 时出错: {e_path} - 跳过此文件。")
-                        continue # Skip this file
+                        continue 
 
-                    if ext.lower() in ARCHIVE_EXTENSIONS:
+                    # Use is_archive_winrar for validation
+                    if is_archive_winrar(abs_path, self.winrar_path):
                         if abs_path not in self.processed_archives:
-                            self.extraction_queue.append(abs_path) # Add absolute path to queue
+                            self.extraction_queue.append(abs_path) 
                             found_nested_count += 1
-                            print(f"已加入嵌套压缩包到队列: {abs_path}")
+                            print(f"已加入有效嵌套压缩包到队列: {abs_path}")
                         else:
                             print(f"跳过已处理的嵌套压缩包: {abs_path}")
+                    # else:
+                        # Optional: print if a file was skipped due to not being a valid archive
+                        # print(f"文件 '{abs_path}' 不是有效的压缩包格式或WinRAR无法处理。")
         except Exception as e_walk:
             # Catch any other unexpected error during the initial os.walk setup or if onerror is not robust enough
             print(f"严重警告: 扫描目录 '{parent_output_directory}' 时发生不可恢复错误: {e_walk}")
@@ -248,17 +265,25 @@ class App(TkinterDnD.Tk if TkinterDnD else tk.Tk):
 
         current_archive_path = self.extraction_queue.popleft()
         abs_current_archive_path = os.path.abspath(current_archive_path)
+        archive_name = os.path.basename(current_archive_path) # For display name
+
+        # Validate if the dequeued item is an archive before processing
+        # This is especially important if initial add to listbox doesn't validate,
+        # or if something non-archive gets into the queue through other means.
+        if not is_archive_winrar(abs_current_archive_path, self.winrar_path):
+            self.status_label.config(text=f"文件 '{archive_name}' 不是有效的压缩包格式，已跳过。")
+            print(f"文件 '{abs_current_archive_path}' 被WinRAR确认为非压缩包，跳过处理。")
+            self.after(100, self._process_extraction_queue) # Process next
+            return
 
         if abs_current_archive_path in self.processed_archives:
             print(f"跳过已处理文件: {current_archive_path}")
-            self.status_label.config(text=f"跳过已处理: {os.path.basename(current_archive_path)}")
+            self.status_label.config(text=f"跳过已处理: {archive_name}")
             self.after(0, self._process_extraction_queue) # Process next immediately
             return
 
         self.processed_archives.add(abs_current_archive_path)
         
-        archive_name = os.path.basename(current_archive_path) # For display name in status messages
-
         # New output directory logic using the absolute path of the archive
         archive_dir = os.path.dirname(abs_current_archive_path)
         base_name_without_ext = os.path.splitext(os.path.basename(abs_current_archive_path))[0]
@@ -267,40 +292,62 @@ class App(TkinterDnD.Tk if TkinterDnD else tk.Tk):
         self.status_label.config(text=f"准备解压: {archive_name} (队列剩余: {len(self.extraction_queue)})")
         self.update_idletasks()
 
-        current_password = None
-        max_retries = 3 # Password retries for the current archive
-        retries_count = 0
+        # --- Default Password Integration ---
+        gui_default_password = self.default_password_var.get()
+        current_password = gui_default_password if gui_default_password else None
+        
+        # Flag to track if the first attempt was with the GUI default password
+        # This helps in providing specific feedback if the default password fails.
+        # It's set to False after the first attempt (whether success or fail, or if no default pass was provided)
+        # or when user starts manual input.
+        attempted_with_gui_default = bool(gui_default_password) 
+        # --- End Default Password Integration ---
 
-        # This inner loop for password attempts can remain synchronous as it involves user interaction
-        # or quick checks. The GUI update is handled by `simpledialog`.
+        max_retries = 3 
+        retries_count = 0 
+
         while True: 
-            if retries_count == 0:
-                self.status_label.config(text=f"开始解压: {archive_name}...")
-            else:
-                self.status_label.config(text=f"使用密码重试 ({retries_count}/{max_retries}): {archive_name}...")
+            if attempted_with_gui_default:
+                self.status_label.config(text=f"尝试使用默认密码解压: {archive_name}...")
+            elif retries_count == 0 and not attempted_with_gui_default : # First attempt without any default password tried
+                 self.status_label.config(text=f"开始解压: {archive_name}...")
+            else: # Subsequent manual retries via dialog
+                self.status_label.config(text=f"使用新密码重试 ({retries_count}/{max_retries}): {archive_name}...")
             self.update_idletasks()
 
             status, message = extract_archive(abs_current_archive_path, output_directory, 
                                               winrar_path=self.winrar_path, password=current_password)
-            print(f"解压尝试: {abs_current_archive_path}, 状态: {status}, 信息: {message}, 使用密码: {'是' if current_password else '否'}, WinRAR路径: {self.winrar_path}")
+            print(f"解压尝试: {abs_current_archive_path}, 状态: {status}, 信息: {message}, 使用密码: {'是 (默认)' if attempted_with_gui_default and current_password else ('是' if current_password else '否')}, WinRAR路径: {self.winrar_path}")
 
             if status == 'success':
                 self.status_label.config(text=f"成功: {archive_name} 已解压。")
                 self.update_idletasks()
                 self._scan_and_enqueue_nested_archives(output_directory, archive_name)
-                break # Breaks password loop, then proceeds to next item in queue via self.after
+                break
             elif status == 'password_needed' or status == 'wrong_password':
                 if retries_count >= max_retries:
                     self.status_label.config(text=f"失败: {archive_name} 达到最大密码尝试次数。")
-                    break 
+                    break
                 
-                prompt_title = "需要密码" if status == 'password_needed' else "密码错误或无效"
-                prompt_message = f"压缩文件 '{archive_name}' 需要密码:" if status == 'password_needed' \
-                                 else f"密码错误或压缩文件损坏。请为 '{archive_name}' 输入正确密码:"
+                dialog_title = "需要密码"
+                dialog_message = f"压缩文件 '{archive_name}' 需要密码:"
+
+                if status == 'wrong_password':
+                    dialog_title = "密码错误或无效"
+                    if attempted_with_gui_default and current_password == gui_default_password:
+                        # Default password failed specifically
+                        dialog_message = f"默认密码错误或压缩文件损坏。请为 '{archive_name}' 输入正确密码:"
+                        self.status_label.config(text=f"默认密码错误: {archive_name}。请手动输入。")
+                        self.update_idletasks()
+                    else: # A manually entered password failed
+                        dialog_message = f"密码错误或压缩文件损坏。请为 '{archive_name}' 重新输入密码:"
                 
-                current_password = simpledialog.askstring(prompt_title, prompt_message, parent=self)
+                # Reset attempted_with_gui_default after the first attempt (if it was true) or if no default password was used.
+                # This ensures subsequent prompts don't incorrectly assume they are for the "default" password.
+                attempted_with_gui_default = False 
+                current_password = simpledialog.askstring(dialog_title, dialog_message, parent=self)
                 
-                if current_password is None: # User cancelled dialog
+                if current_password is None: 
                     self.status_label.config(text=f"用户取消: {archive_name} 的密码输入。")
                     break 
                 retries_count += 1

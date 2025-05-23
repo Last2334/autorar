@@ -278,22 +278,24 @@ class App(TkinterDnD.Tk if TkinterDnD else tk.Tk):
                     break 
                 retries_count += 1
             elif status == 'failure':
-            self.status_label.config(text=f"解压失败: {archive_name}。详细信息: {message_short}")
-            # Log full message for debugging
-            print(f"详细错误 for {archive_name}: {message}")
-            # Try to make message_short more user-friendly for common issues
-            if "磁盘已满" in message or "空间不足" in message:
-                 message_short = f"磁盘空间不足或权限问题导致写入文件失败。"
-            elif "损坏" in message or "CRC" in message.upper(): # CRC often implies corruption
-                 message_short = f"文件可能已损坏或格式不支持。"
-            elif "权限不足" in message:
-                 message_short = f"文件/目录权限不足。"
-            else:
-                 message_short = message.splitlines()[0] if message else "未知错误。" # Ensure message_short is always set
-            self.status_label.config(text=f"失败: {archive_name} - {message_short}")
-            break
-        else: # Unknown status
-            self.status_label.config(text=f"未知状态: {archive_name} - {message}")
+                # Log full message for debugging first
+                print(f"详细错误 for {archive_name}: {message}")
+
+                # Define message_short based on the current 'message'
+                if "磁盘已满" in message or "空间不足" in message:
+                     message_short = f"磁盘空间不足或权限问题导致写入文件失败。"
+                elif "损坏" in message or "CRC" in message.upper(): # CRC often implies corruption
+                     message_short = f"文件可能已损坏或格式不支持。"
+                elif "权限不足" in message:
+                     message_short = f"文件/目录权限不足。"
+                else:
+                     # Ensure message is not None before calling splitlines, provide a default.
+                     message_short = message.splitlines()[0] if message else "未知错误。"
+                
+                self.status_label.config(text=f"失败: {archive_name} - {message_short}")
+                break
+            else: # Unknown status
+                self.status_label.config(text=f"未知状态: {archive_name} - {message}")
                 break
         
         # Schedule next item from queue

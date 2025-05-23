@@ -207,18 +207,30 @@ class App(TkinterDnD.Tk if TkinterDnD else tk.Tk):
         self.status_label.config(text=f"扫描解压目录 '{parent_archive_name}' 查找嵌套压缩包...")
         self.update_idletasks()
         found_nested_count = 0
-        for root, _, files in os.walk(parent_output_directory):
-            for file in files:
-                file_path = os.path.join(root, file)
-                _, ext = os.path.splitext(file_path)
-                if ext.lower() in ARCHIVE_EXTENSIONS:
-                    abs_path = os.path.abspath(file_path)
-                    if abs_path not in self.processed_archives:
-                        self.extraction_queue.append(file_path)
-                        found_nested_count += 1
-                        print(f"已加入嵌套压缩包到队列: {file_path}")
-                    else:
-                        print(f"跳过已处理的嵌套压缩包: {file_path}")
+        try:
+            for root, _, files in os.walk(parent_output_directory, onerror=lambda e: print(f"警告: 扫描目录时发生错误: {e} (路径: {e.filename}) - 跳过此目录分支。")):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        _, ext = os.path.splitext(file_path)
+                        abs_path = os.path.abspath(file_path) # Get absolute path early for consistent checks
+                    except Exception as e_path:
+                        print(f"警告: 处理路径 '{file_path}' 时出错: {e_path} - 跳过此文件。")
+                        continue # Skip this file
+
+                    if ext.lower() in ARCHIVE_EXTENSIONS:
+                        if abs_path not in self.processed_archives:
+                            self.extraction_queue.append(abs_path) # Add absolute path to queue
+                            found_nested_count += 1
+                            print(f"已加入嵌套压缩包到队列: {abs_path}")
+                        else:
+                            print(f"跳过已处理的嵌套压缩包: {abs_path}")
+        except Exception as e_walk:
+            # Catch any other unexpected error during the initial os.walk setup or if onerror is not robust enough
+            print(f"严重警告: 扫描目录 '{parent_output_directory}' 时发生不可恢复错误: {e_walk}")
+            self.status_label.config(text=f"警告: 扫描 '{parent_archive_name}' 的部分内容失败。")
+            self.update_idletasks()
+            # Allow the process to continue with already found items or finish if none.
         
         if found_nested_count > 0:
             self.status_label.config(text=f"找到 {found_nested_count} 个嵌套压缩包，已加入队列。")

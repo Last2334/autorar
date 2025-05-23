@@ -147,18 +147,29 @@ class App(TkinterDnD.Tk if TkinterDnD else tk.Tk):
         """Helper function to enable/disable controls."""
         if state == tk.DISABLED:
             self.start_button.config(state=tk.DISABLED)
-            self.file_listbox.config(state=tk.DISABLED)
-            # Attempt to unbind drag-and-drop
-            if TkinterDnD and self.original_dnd_bind_id:
-                self.file_listbox.dnd_unbind('<<Drop>>', self.original_dnd_bind_id)
+            self.file_listbox.config(state=tk.DISABLED) # Standard Tkinter disable
+            if TkinterDnD:
+                try:
+                    # Attempt to unregister the listbox as a drop target
+                    self.file_listbox.drop_target_unregister()
+                    print("Listbox unregistered as drop target.")
+                except Exception as e:
+                    # This might happen if tkinterdnd2 is not fully initialized
+                    # or if the widget wasn't registered, or if the method name is different.
+                    print(f"Error unregistering drop target: {e}")
         else: # tk.NORMAL
             self.start_button.config(state=tk.NORMAL)
-            self.file_listbox.config(state=tk.NORMAL)
-            # Re-bind drag-and-drop
+            self.file_listbox.config(state=tk.NORMAL) # Standard Tkinter enable
             if TkinterDnD:
-                 # Re-register just in case, and rebind.
-                self.file_listbox.drop_target_register(DND_FILES)
-                self.original_dnd_bind_id = self.file_listbox.dnd_bind('<<Drop>>', self.on_drop)
+                try:
+                    # Re-register and re-bind
+                    self.file_listbox.drop_target_register(DND_FILES)
+                    # Re-binding is important if unregister clears bindings, or if we want to ensure it's fresh.
+                    # Storing the ID is still fine, though not used for unbinding in this revised approach.
+                    self.original_dnd_bind_id = self.file_listbox.dnd_bind('<<Drop>>', self.on_drop)
+                    print("Listbox re-registered as drop target and rebound.")
+                except Exception as e:
+                    print(f"Error re-registering drop target: {e}")
 
 
     def start_decompression(self):

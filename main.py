@@ -245,9 +245,13 @@ class App(TkinterDnD.Tk if TkinterDnD else tk.Tk):
 
         self.processed_archives.add(abs_current_archive_path)
         
-        archive_name = os.path.basename(current_archive_path)
-        output_directory = f"./extracted_{archive_name}_{len(self.processed_archives)}/" # Unique enough for this app
+        archive_name = os.path.basename(current_archive_path) # For display name in status messages
 
+        # New output directory logic using the absolute path of the archive
+        archive_dir = os.path.dirname(abs_current_archive_path)
+        base_name_without_ext = os.path.splitext(os.path.basename(abs_current_archive_path))[0]
+        output_directory = os.path.join(archive_dir, f"{base_name_without_ext}_output")
+        
         self.status_label.config(text=f"准备解压: {archive_name} (队列剩余: {len(self.extraction_queue)})")
         self.update_idletasks()
 
